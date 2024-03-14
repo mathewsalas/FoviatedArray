@@ -1,40 +1,49 @@
-import scipy.io as sio
+import wave
+import time
+import numpy as np
 import serial
+import keyboard
+from bitstring import BitArray
 
-print("loading file...")
-# load file containing the signal in a .mat file
-b = sio.loadmat('C:/Users/firep/.m files/tmp/4qam_36shutter.mat')
-print("file loaded")
-# set up the serial port for exporting data
-arduino = serial.Serial(port='COM3', baudrate=115200)
+print('opening file...')
+file_name = "test.wav"
+wf = wave.open(file_name, "w")
+print('file open')
 
-# move the data from the file into a variable of integers
-c = b['q'].astype(int)
-pack = []
-print("Sending bytes...")
+sample_rate = 50000
 
-i = 0
-print(len(c[0]))
-# while loop that reads out the data from the variable and loads it to the serial port
-while i < len(c[0]):
-    # the serial port can not hold all the data at once so data is sent in blocks of 10 characters
-    # when the arduino board has read some the data back which the computer reads to send the next
-    # 10 characters
-    if arduino.read() == b'A':
-        # convert 10 integers to characters as bits to be sent over the serial port
-        num = c[0, i*10:(i+1)*10-1].tobytes()
-        # the tobytes() function adds buffers which are unwanted so this loop removes them
-        for j in range(int(len(num)/4)):
-            pack.append(num[j*4])
-        # write the data to the serial port
-        print(arduino.write(pack))
-        print(pack)
-        pack = []
-        i += 1
-        print(i)
+wf.setnchannels(1)
+wf.setsampwidth(3)
+wf.setframerate(sample_rate)
 
-print("bytes sent")
-# send final character to the arduino to turn off the shutters
-arduino.write((36).to_bytes(1, byteorder='big'))
-# close the serial port
-arduino.close()
+print('connecting to arduino...')
+arduino = serial.Serial(port='COM3', baudrate=230400)
+arduino.setDTR(False)
+time.sleep(1)
+arduino.flushInput()
+arduino.setDTR(True)
+time.sleep(3)
+print('connected')
+
+print('starting collection...')
+arduino.write(b'A')
+
+while True:
+    channel = arduino.read(3)
+    # print(int.from_bytes(channel, byteorder='big', signed=True), sep=' ')
+    wf.writeframes(channel)
+    if keyboard.is_pressed("k"):
+        break
+
+print('collected ' + str(wf.getnframes()) + ' samples')
+print('collection finished')
+wf.close()
+
+
+# for t in np.linspace(0, 5, sample_rate):
+#     channel = 0.5 * np.sin(2 * np.pi * 1000 * t)
+#     quantized_channel = channel * (2 ** 23 - 1)
+#     int_channel = quantized_channel.astype('int').item()
+#     wf.writeframes(int_channel.to_bytes(3, byteorder='little', signed=True))
+#     print(int_channel, int_channel.to_bytes(3, byteorder='big', signed=True),
+#           BitArray(int_channel.to_bytes(3, byteorder='big', signed=True)).bin, sep=' ')
