@@ -17,7 +17,7 @@ wf.setsampwidth(3)
 wf.setframerate(sample_rate)
 
 print('connecting to arduino...')
-arduino = serial.Serial(port='COM3', baudrate=230400)
+arduino = serial.Serial(port='COM3', baudrate=2000000)
 arduino.setDTR(False)
 time.sleep(1)
 arduino.flushInput()
