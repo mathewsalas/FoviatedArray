@@ -5,7 +5,7 @@ int32_t testVal;
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(230400);
+  Serial.begin(2000000);
 
   while(i){
     i = Serial.read() == 'A' ? 0 : 1;
