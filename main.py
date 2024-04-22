@@ -1,49 +1,65 @@
 import wave
 import time
-import numpy as np
 import serial
 import keyboard
-from bitstring import BitArray
+import numpy as np
 
-print('opening file...')
 file_name = "test.wav"
 wf = wave.open(file_name, "w")
-print('file open')
-
 sample_rate = 50000
+bit_depth = 2  # 24-bit audio, represented in 3 bytes
 
 wf.setnchannels(1)
-wf.setsampwidth(3)
+wf.setsampwidth(bit_depth)
 wf.setframerate(sample_rate)
 
-print('connecting to arduino...')
-arduino = serial.Serial(port='COM3', baudrate=2000000)
+arduino = serial.Serial(port='COM9', baudrate=2000000, timeout=None)
 arduino.setDTR(False)
 time.sleep(1)
 arduino.flushInput()
 arduino.setDTR(True)
 time.sleep(3)
-print('connected')
 
-print('starting collection...')
+buffer_size = 1600  # Adjust buffer size as needed
+data_buffer = bytearray()
+
+print('Starting collection...')
 arduino.write(b'A')
+start_time = time.time()
+
 
 while True:
-    channel = arduino.read(3)
-    # print(int.from_bytes(channel, byteorder='big', signed=True), sep=' ')
-    wf.writeframes(channel)
+    # Read bytes into the buffer
+    channel_data = arduino.read(buffer_size)
+
+    # Convert the buffer data from bytes to a NumPy array
+    samples = np.frombuffer(channel_data, dtype=np.uint8)
+    print(len(samples))
+
+    # Reconstruct the 12-bit unsigned values from the bytes
+    unsigned_samples = np.zeros(len(samples) // 2, dtype=np.uint16)
+    unsigned_samples = (samples[::2].astype(np.uint16) + (samples[1::2].astype(np.uint16) << 8)) & 0x0FFF
+
+    # Convert the unsigned 12-bit samples to signed 16-bit representation
+    signed_samples = (unsigned_samples.astype(np.int16) - 2048) * 8
+
+    # Write the signed samples to the WAV file
+    wf.writeframes(signed_samples.tobytes())
+    print(f'Collected {wf.getnframes()} samples', end='\r')
+
     if keyboard.is_pressed("k"):
         break
 
-print('collected ' + str(wf.getnframes()) + ' samples')
-print('collection finished')
+end_time = time.time()
+collection_time = end_time - start_time
+
+total_bits_received = wf.getnframes() * 2 * 8
+sample_rate = wf.getnframes() / collection_time
+data_rate = total_bits_received / collection_time
+
+print('\nCollection finished')
+print(f'Total time: {collection_time:.2f} seconds')
+print(f'Samples rate: {sample_rate:.2f} Samples per second')
+print(f'Data rate: {data_rate:.2f} bits per second')
+
 wf.close()
-
-
-# for t in np.linspace(0, 5, sample_rate):
-#     channel = 0.5 * np.sin(2 * np.pi * 1000 * t)
-#     quantized_channel = channel * (2 ** 23 - 1)
-#     int_channel = quantized_channel.astype('int').item()
-#     wf.writeframes(int_channel.to_bytes(3, byteorder='little', signed=True))
-#     print(int_channel, int_channel.to_bytes(3, byteorder='big', signed=True),
-#           BitArray(int_channel.to_bytes(3, byteorder='big', signed=True)).bin, sep=' ')
